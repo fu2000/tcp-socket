@@ -30,6 +30,9 @@ final class ReactTcpServer implements TcpServerInterface
     /** @var array<int, ConnectionInterface> */
     private array $connections = [];
 
+    /** @var array<int, float> */
+    private array $lastSeen = [];
+
     public function __construct(private readonly ServerConfig $config, ?LoopInterface $loop = null)
     {
         $this->loop = $loop ?? Loop::get();
@@ -53,6 +56,18 @@ final class ReactTcpServer implements TcpServerInterface
             $this->handleConnection($stream);
         });
 
+        if ($this->config->heartbeatTimeout > 0) {
+            $interval = $this->config->heartbeatInterval > 0 ? $this->config->heartbeatInterval : 30;
+            $this->loop->addPeriodicTimer($interval, function (): void {
+                $deadline = microtime(true) - $this->config->heartbeatTimeout;
+                foreach ($this->lastSeen as $id => $seen) {
+                    if ($seen <= $deadline && isset($this->connections[$id])) {
+                        $this->connections[$id]->close();
+                    }
+                }
+            });
+        }
+
         $this->loop->run();
     }
 
@@ -62,6 +77,7 @@ final class ReactTcpServer implements TcpServerInterface
             $connection->close();
         }
         $this->connections = [];
+        $this->lastSeen = [];
 
         $this->server?->close();
         $this->server = null;
@@ -81,8 +97,10 @@ final class ReactTcpServer implements TcpServerInterface
 
         $connection = new ReactConnection($id, $stream, static fn (string $data): string => $framing->encode($data));
         $this->connections[$id] = $connection;
+        $this->lastSeen[$id] = microtime(true);
 
-        $stream->on('data', function (string $chunk) use ($connection, $framing): void {
+        $stream->on('data', function (string $chunk) use ($id, $connection, $framing): void {
+            $this->lastSeen[$id] = microtime(true);
             try {
                 foreach ($framing->push($chunk) as $payload) {
                     $this->handler?->onMessage(
@@ -97,7 +115,7 @@ final class ReactTcpServer implements TcpServerInterface
         });
 
         $stream->on('close', function () use ($id, $connection): void {
-            unset($this->connections[$id]);
+            unset($this->connections[$id], $this->lastSeen[$id]);
             $this->handler?->onClose($connection);
         });
 

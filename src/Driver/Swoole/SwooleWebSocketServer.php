@@ -42,7 +42,15 @@ final class SwooleWebSocketServer implements WebSocketServerInterface
             SWOOLE_PROCESS,
             SWOOLE_SOCK_TCP
         );
-        $server->set(SwooleSupport::serverOptions($this->config->options));
+        $options = $this->config->options;
+        if ($this->config->heartbeatInterval > 0) {
+            // Required to push ping frames and receive pong frames. Swoole's
+            // native heartbeat_check_interval closes WebSocket clients even
+            // when they answer pings, so the ping timer below is used instead.
+            $options['open_websocket_ping_frame'] = $options['open_websocket_ping_frame'] ?? true;
+        }
+
+        $server->set(SwooleSupport::serverOptions($options));
         $this->server = $server;
 
         // A custom handshake suppresses Swoole's "open" event, so the connection
@@ -61,6 +69,34 @@ final class SwooleWebSocketServer implements WebSocketServerInterface
         $server->on('open', function (\Swoole\WebSocket\Server $srv, \Swoole\Http\Request $request): void {
             $this->registerConnection($srv, $request->fd);
         });
+
+        if ($this->config->heartbeatInterval > 0) {
+            $server->on('workerStart', function (\Swoole\WebSocket\Server $srv, int $workerId): void {
+                if ($workerId !== 0) {
+                    return;
+                }
+
+                \Swoole\Timer::tick($this->config->heartbeatInterval * 1000, function () use ($srv): void {
+                    foreach ($this->connections as $fd => $connection) {
+                        if (!$srv->isEstablished($fd)) {
+                            continue;
+                        }
+
+                        // last_time is maintained by Swoole and refreshed by any
+                        // packet, including pong frames (which are not delivered
+                        // to the "message" event).
+                        $info = $srv->getClientInfo($fd);
+                        $lastTime = (int) (is_array($info) ? ($info['last_time'] ?? 0) : 0);
+                        if ($lastTime > 0 && time() - $lastTime > $this->config->heartbeatTimeout) {
+                            $srv->close($fd);
+                            continue;
+                        }
+
+                        $srv->push($fd, '', WEBSOCKET_OPCODE_PING);
+                    }
+                });
+            });
+        }
 
         $server->on('message', function (\Swoole\WebSocket\Server $srv, \Swoole\WebSocket\Frame $frame): void {
             if (!isset($this->connections[$frame->fd])) {

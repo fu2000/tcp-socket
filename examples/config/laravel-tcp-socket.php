@@ -18,6 +18,7 @@ return [
             'handler' => App\Socket\EchoTcpServerHandler::class,
             'framing' => 'eof',
             'delimiter' => "\n",
+            'heartbeat' => ['interval' => 30, 'timeout' => 90],
         ],
         'client' => [
             'host' => '127.0.0.1',
@@ -31,6 +32,7 @@ return [
             'port' => 9502,
             'path' => '/',
             'handler' => App\Socket\EchoWebSocketServerHandler::class,
+            'heartbeat' => ['interval' => 30, 'timeout' => 90],
         ],
         'client' => [
             'url' => 'ws://127.0.0.1:9502',

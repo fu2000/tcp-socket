@@ -103,6 +103,36 @@ TCP 是字节流，需要界定“一条消息”。`framing` 配置：
 
 分帧对业务透明：handler 收到的就是“一条消息”，`$connection->send()` 传入消息内容即可。
 
+## 心跳 / 保活
+
+服务端可以开启心跳，自动踢掉已经掉线的设备：
+
+```php
+'tcp' => [
+    'server' => [
+        // ...
+        'heartbeat' => ['interval' => 30, 'timeout' => 90],
+    ],
+],
+'websocket' => [
+    'server' => [
+        // ...
+        'heartbeat' => ['interval' => 30, 'timeout' => 90],
+    ],
+],
+```
+
+| 协议 | 服务端行为 | 设备端/客户端 |
+| --- | --- | --- |
+| WebSocket | 每 `interval` 秒发 ping，`timeout` 内没回 pong 就断开 | **自动回 pong**（包内已实现，浏览器也是），无需写代码 |
+| TCP | 超过 `timeout` 秒没有任何数据就断开（Swoole 驱动用原生心跳检测） | 需要定时发应用层心跳，例如 `{"type":"heartbeat"}` |
+| MQTT | broker 协议保活 | 客户端库按 `keep_alive` 自动 PING，无需写代码 |
+
+- `swoole` 驱动：TCP 服务端映射为 `heartbeat_check_interval` / `heartbeat_idle_time`；
+  WebSocket 服务端用定时器发 ping 帧，并按 Swoole 记录的连接最后活跃时间断开超时客户端。
+- `react` 驱动：WebSocket 服务端自己发 ping 帧；TCP 服务端做空闲检测（TCP 协议没有 ping）。
+- TCP 设备端心跳定时器的写法见各框架指南的「保活（心跳）」一节。
+
 ## 驱动说明
 
 `driver` 可选 `auto`（默认）/ `swoole` / `react`。
@@ -121,9 +151,9 @@ TCP 是字节流，需要界定“一条消息”。`framing` 配置：
 
 ```text
 tcp-socket.driver
-tcp-socket.tcp.server        host / port / handler / framing / delimiter / length_bytes / options
+tcp-socket.tcp.server        host / port / handler / framing / delimiter / length_bytes / heartbeat / options
 tcp-socket.tcp.client        host / port / connect_timeout / framing ...
-tcp-socket.websocket.server  host / port / path / handler / options
+tcp-socket.websocket.server  host / port / path / handler / heartbeat / options
 tcp-socket.websocket.client  url / connect_timeout
 tcp-socket.mqtt              host / port / username / password / handler / subscriptions ...
 ```

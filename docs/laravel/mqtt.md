@@ -190,6 +190,14 @@ $client->publish('device/1/cmd', 'reboot', qos: 1, retain: false);
 $client->disconnect();
 ```
 
+## 保活（心跳）
+
+MQTT 的保活由协议层负责：客户端库会按配置的 `keep_alive`（秒）自动向 broker 发 PINGREQ，
+broker 长时间收不到就断开连接。你**不需要写保活代码**，只要保持 `php artisan tcp-socket:mqtt-listen`
+进程常驻（用 supervisor / systemd 守护）。
+
+建议 `keep_alive` 设为 30–60 秒。
+
 ## 常见问题
 
 | 现象 | 处理 |

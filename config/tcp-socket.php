@@ -26,6 +26,13 @@ return [
             'framing' => 'eof',
             'delimiter' => "\n",
             'length_bytes' => 4,
+            // Optional heartbeat. Enable by adding the array:
+            // 'heartbeat' => ['interval' => 30, 'timeout' => 90],
+            // Swoole maps it to heartbeat_check_interval/heartbeat_idle_time;
+            // the react driver closes connections idle for longer than "timeout".
+            // TCP has no protocol-level ping, so devices should send app-level
+            // heartbeats (e.g. {"type":"ping"}) within "timeout".
+            'heartbeat' => null,
             // Passed through to Swoole\Server::set() when using the swoole driver.
             'options' => [],
         ],
@@ -48,6 +55,13 @@ return [
             'path' => '/',
             // Class extending Hk100\TcpSocket\Server\AbstractWebSocketServerHandler.
             'handler' => null,
+            // Optional heartbeat. Enable by adding the array:
+            // 'heartbeat' => ['interval' => 30, 'timeout' => 90],
+            // The server sends WebSocket ping frames every "interval" seconds and
+            // closes clients that do not answer within "timeout" seconds. Clients
+            // (including this package's WS clients and browsers) answer pings
+            // automatically, so no device-side code is needed.
+            'heartbeat' => null,
             'options' => [],
         ],
         'client' => [

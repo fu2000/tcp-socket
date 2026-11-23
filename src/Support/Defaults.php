@@ -25,6 +25,7 @@ final class Defaults
                     'framing' => 'eof',
                     'delimiter' => "\n",
                     'length_bytes' => 4,
+                    'heartbeat' => null,
                     'options' => [],
                 ],
                 'client' => [
@@ -43,6 +44,7 @@ final class Defaults
                     'port' => 9502,
                     'path' => '/',
                     'handler' => null,
+                    'heartbeat' => null,
                     'options' => [],
                 ],
                 'client' => [

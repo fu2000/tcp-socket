@@ -30,6 +30,12 @@ final class ReactWebSocketServer implements WebSocketServerInterface
     /** @var array<int, ReactConnection> */
     private array $connections = [];
 
+    /** @var array<int, ReactStream> */
+    private array $streams = [];
+
+    /** @var array<int, float> */
+    private array $lastSeen = [];
+
     public function __construct(private readonly ServerConfig $config, ?LoopInterface $loop = null)
     {
         $this->loop = $loop ?? Loop::get();
@@ -49,6 +55,21 @@ final class ReactWebSocketServer implements WebSocketServerInterface
         $this->server->on('error', static function (): void {
         });
 
+        if ($this->config->heartbeatInterval > 0) {
+            $this->loop->addPeriodicTimer($this->config->heartbeatInterval, function (): void {
+                $deadline = microtime(true) - $this->config->heartbeatTimeout;
+                foreach ($this->connections as $id => $connection) {
+                    if (($this->lastSeen[$id] ?? 0) <= $deadline) {
+                        $connection->close();
+                        continue;
+                    }
+                    if (isset($this->streams[$id])) {
+                        $this->streams[$id]->write(FrameEncoder::ping('', false));
+                    }
+                }
+            });
+        }
+
         $this->loop->run();
     }
 
@@ -58,6 +79,8 @@ final class ReactWebSocketServer implements WebSocketServerInterface
             $connection->close();
         }
         $this->connections = [];
+        $this->streams = [];
+        $this->lastSeen = [];
 
         $this->server?->close();
         $this->server = null;
@@ -85,9 +108,11 @@ final class ReactWebSocketServer implements WebSocketServerInterface
                 FrameEncoder::close(1000, false),
             );
             $this->connections[$id] = $connection;
+            $this->streams[$id] = $stream;
+            $this->lastSeen[$id] = microtime(true);
 
             $stream->on('close', function () use ($id, &$connection): void {
-                unset($this->connections[$id]);
+                unset($this->connections[$id], $this->streams[$id], $this->lastSeen[$id]);
                 if ($connection !== null) {
                     $this->handler?->onClose($connection);
                 }
@@ -101,9 +126,11 @@ final class ReactWebSocketServer implements WebSocketServerInterface
             $this->handler?->onOpen($connection);
         };
 
-        $processFrames = function (string $chunk) use ($parser, &$connection, $stream): void {
+        $processFrames = function (string $chunk) use ($parser, $id, &$connection, $stream): void {
             try {
                 foreach ($parser->push($chunk) as $frame) {
+                    $this->lastSeen[$id] = microtime(true);
+
                     if ($frame->opcode === Opcode::Ping) {
                         $stream->write(FrameEncoder::pong($frame->payload, false));
                         continue;

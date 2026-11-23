@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-11-24
+
+### Added
+- Server heartbeat: `heartbeat` => `['interval' => 30, 'timeout' => 90]` for TCP and
+  WebSocket servers. Swoole TCP maps it to `heartbeat_check_interval` /
+  `heartbeat_idle_time`; both drivers send WebSocket ping frames on a timer and
+  close clients that stop answering within `timeout`.
+- Docs: every TCP/WebSocket guide now explains how to handle received messages in
+  application code (dispatch by type, execute pushed commands, reply) and how to
+  keep connections alive (server heartbeat, device-side heartbeat timers, automatic
+  WebSocket pong, MQTT keep-alive).
+
 ## [1.0.3] - 2026-11-23
 
 ### Changed

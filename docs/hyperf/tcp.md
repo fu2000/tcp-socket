@@ -274,6 +274,197 @@ php bin/hyperf.php app:tcp-client
 > 客户端运行的驱动：Hyperf 命令默认在协程中，`auto` → `swoole`；
 > 如果在非协程环境（例如 Laravel）使用，`auto` 会自动改用 `react`。
 
+## 收到消息后怎么处理（服务端）
+
+`onMessage` 收到的是一条完整消息。真实业务通常是：解析 JSON → 按 `type` / `cmd` 分发 → 调业务类 → 回复设备。handler 由容器解析（`$container->get($class)`），所以可以构造函数注入业务类：
+
+```php
+<?php
+
+declare(strict_types=1);
+
+namespace App\Socket;
+
+use App\Service\DeviceService;
+use Hk100\TcpSocket\Contracts\ConnectionInterface;
+use Hk100\TcpSocket\Message\Message;
+use Hk100\TcpSocket\Server\AbstractTcpServerHandler;
+
+class DeviceTcpServerHandler extends AbstractTcpServerHandler
+{
+    public function __construct(private readonly DeviceService $devices)
+    {
+    }
+
+    public function onMessage(ConnectionInterface $connection, Message $message): void
+    {
+        $data = json_decode($message->payload, true);
+
+        if (!is_array($data)) {
+            $connection->send($this->reply('error', ['message' => 'invalid json']));
+            return;
+        }
+
+        // 设备协议通常有一个 type / cmd 字段，用它分发业务
+        switch ($data['type'] ?? $data['cmd'] ?? '') {
+            case 'register':
+                $connection->setContext('device_id', (string) ($data['device_id'] ?? ''));
+                $connection->send($this->reply('registered', [
+                    'device_id' => $connection->getContext('device_id'),
+                ]));
+                break;
+
+            case 'heartbeat':
+                $connection->setContext('last_seen', time());
+                $connection->send($this->reply('pong', ['ts' => time()]));
+                break;
+
+            case 'data':
+                // 业务处理：入库 / 投队列 / 调用服务
+                $deviceId = (string) $connection->getContext('device_id');
+                $this->devices->store($deviceId, $data);
+                $connection->send($this->reply('ack', ['ok' => true]));
+                break;
+
+            case 'command_result':
+                // 设备回报某条下行指令的执行结果
+                $this->devices->saveCommandResult($data);
+                break;
+
+            default:
+                $connection->send($this->reply('error', ['message' => 'unknown type']));
+        }
+    }
+
+    private function reply(string $type, array $payload = []): string
+    {
+        return json_encode(['type' => $type] + $payload, JSON_UNESCAPED_UNICODE);
+    }
+}
+```
+
+业务类放在任意位置（例如 `app/Service/DeviceService.php`），通过构造函数注入即可：
+
+```php
+<?php
+
+declare(strict_types=1);
+
+namespace App\Service;
+
+class DeviceService
+{
+    public function store(string $deviceId, array $data): void
+    {
+        logger()->info('device data', ['device_id' => $deviceId, 'data' => $data]);
+        // DB::table('device_data')->insert(...);
+    }
+
+    public function saveCommandResult(array $data): void
+    {
+        logger()->info('command result', $data);
+    }
+}
+```
+
+向**单个设备**下发指令：保存连接后调用 `send()`。例如在业务代码里按设备号找到连接（需要自己在 `register` 时把 `ConnectionInterface` 存到 Redis / 内存表中），再 `$connection->send($json)`。
+
+## 客户端收到服务端推送后怎么处理
+
+客户端不是只能打印。服务端下发指令时，在 `onMessage` 里解析并执行，然后把结果发回去：
+
+```php
+public function onMessage(Message $message): void
+{
+    $data = json_decode($message->payload, true);
+
+    if (!is_array($data)) {
+        echo '[tcp] ' . $message->payload . PHP_EOL;
+        return;
+    }
+
+    switch ($data['type'] ?? '') {
+        case 'command':
+            // 执行服务端指令（重启、采集、升级……），再回报结果
+            $result = $this->executeCommand($data);
+            $this->send(json_encode([
+                'type' => 'command_result',
+                'id' => $data['id'] ?? null,
+                'result' => $result,
+            ], JSON_UNESCAPED_UNICODE));
+            break;
+
+        case 'pong':
+            // 心跳响应，可记录最后活跃时间
+            break;
+
+        default:
+            echo '[tcp] ' . $message->payload . PHP_EOL;
+    }
+}
+
+private function executeCommand(array $command): array
+{
+    return match ($command['action'] ?? '') {
+        'reboot' => ['ok' => true, 'action' => 'reboot'],
+        'collect' => ['ok' => true, 'temperature' => 23.5],
+        default => ['ok' => false, 'message' => 'unknown action'],
+    };
+}
+```
+
+## 保活（心跳）
+
+| 协议 | 心跳机制 | 需要你写代码吗 |
+| --- | --- | --- |
+| WebSocket | 协议层 ping/pong：服务端定时发 ping，客户端**自动回 pong**（包内已实现，server/client 两端都是） | 不需要 |
+| TCP | 协议本身没有 ping/pong | 设备端定时发应用层心跳（例如 `{"type":"heartbeat"}`） |
+| MQTT | `keep_alive` 由 broker 协议保活 | 不需要（见 MQTT 指南） |
+
+### 服务端：自动断开“死连接”
+
+给服务端加 `heartbeat` 配置即可：
+
+```php
+'tcp' => [
+    'server' => [
+        // ...
+        'heartbeat' => [
+            'interval' => 30,   // 检测 / 发 ping 的间隔（秒）
+            'timeout' => 90,    // 超过多少秒没有任何数据（WebSocket 下为没有 pong）就断开
+        ],
+    ],
+],
+```
+
+- **swoole 驱动**：自动映射成 Swoole 的 `heartbeat_check_interval` / `heartbeat_idle_time`；
+  WebSocket 服务端还会开启 `open_websocket_ping_frame`，由 Swoole 发送真正的 ping 帧。
+- **react 驱动**：WebSocket 服务端每隔 `interval` 秒发 ping 帧，`timeout` 内没回 pong 就断开；
+  TCP 服务端没有协议层 ping，只做“空闲超过 `timeout` 秒就断开”。
+- 不配置 `heartbeat`（或设为 `null`）就关闭该功能。
+
+### 设备端：定时发心跳（TCP）
+
+TCP 没有协议层 ping，设备必须自己定时发心跳。在客户端的 `onConnect()` 里启动定时器（Hyperf 协程环境用 `Swoole\Timer`）：
+
+```php
+public function onConnect(): void
+{
+    $this->send(json_encode(['type' => 'register', 'device_id' => 'dev-1']));
+
+    // 每 30 秒发一次心跳；服务端 handler 收到 heartbeat 回 pong
+    \Swoole\Timer::tick(30000, function (): void {
+        $this->send(json_encode(['type' => 'heartbeat', 'ts' => time()]));
+    });
+}
+```
+
+服务端 `onMessage` 里对应的分支见上文（`case 'heartbeat'` 回复 `pong`）。这样即使设备长时间没有业务数据，连接也不会被服务端的心跳检查断开。
+
+### 设备端：WebSocket
+
+如果服务端开启了 `heartbeat`，它会定时发 WebSocket ping 帧；本包的 `AbstractWebSocketClient`（以及浏览器）会自动回 pong，**设备端不需要写任何保活代码**。
+
 ## 常见问题
 
 | 现象 | 处理 |

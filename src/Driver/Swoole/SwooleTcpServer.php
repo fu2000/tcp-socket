@@ -51,7 +51,13 @@ final class SwooleTcpServer implements TcpServerInterface
             SWOOLE_PROCESS,
             SWOOLE_SOCK_TCP
         );
-        $server->set(SwooleSupport::serverOptions($this->config->options));
+        $options = $this->config->options;
+        if ($this->config->heartbeatInterval > 0) {
+            $options['heartbeat_check_interval'] = $this->config->heartbeatInterval;
+            $options['heartbeat_idle_time'] = $this->config->heartbeatTimeout;
+        }
+
+        $server->set(SwooleSupport::serverOptions($options));
         $this->server = $server;
 
         $server->on('connect', function (\Swoole\Server $srv, int $fd): void {

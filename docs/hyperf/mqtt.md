@@ -160,6 +160,14 @@ $client->run();         // 连接 + 自动订阅 + 阻塞消费（Ctrl+C 退出�
 // 或手动：$client->subscribe('xxx/#'); $client->publish(...); $client->disconnect();
 ```
 
+## 保活（心跳）
+
+MQTT 的保活由协议层负责：客户端库会按配置的 `keep_alive`（秒）自动向 broker 发 PINGREQ，
+broker 长时间收不到就断开连接。你**不需要写保活代码**，只要保持
+`php bin/hyperf.php tcp-socket:mqtt-listen` 进程常驻（用 supervisor / systemd 守护）。
+
+建议 `keep_alive` 设为 30–60 秒。
+
 ## 常见问题
 
 | 现象 | 处理 |
