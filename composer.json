@@ -1,0 +1,73 @@
+{
+    "name": "hk100/tcp-socket",
+    "description": "Multi-protocol (TCP / WebSocket / MQTT) communication package for Hyperf and Laravel, with server and client drivers.",
+    "type": "library",
+    "keywords": [
+        "hyperf",
+        "laravel",
+        "tcp",
+        "websocket",
+        "mqtt",
+        "socket",
+        "server",
+        "client",
+        "swoole",
+        "reactphp"
+    ],
+    "license": "MIT",
+    "authors": [
+        {
+            "name": "hk100"
+        }
+    ],
+    "require": {
+        "php": "^8.1",
+        "psr/container": "^1.1|^2.0",
+        "psr/log": "^1.1|^2.0|^3.0",
+        "symfony/console": "^6.0|^7.0",
+        "react/event-loop": "^1.4",
+        "react/socket": "^1.14",
+        "php-mqtt/client": "^2.0"
+    },
+    "require-dev": {
+        "phpunit/phpunit": "^10.5"
+    },
+    "suggest": {
+        "ext-swoole": "Required to use the swoole driver (swoole or openswoole).",
+        "hyperf/framework": "Required to use the Hyperf integration.",
+        "laravel/framework": "Required to use the Laravel integration."
+    },
+    "autoload": {
+        "psr-4": {
+            "Hk100\\TcpSocket\\": "src/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Hk100\\TcpSocket\\Tests\\": "tests/"
+        }
+    },
+    "extra": {
+        "laravel": {
+            "providers": [
+                "Hk100\\TcpSocket\\Laravel\\TcpSocketServiceProvider"
+            ]
+        },
+        "hyperf": {
+            "config": "Hk100\\TcpSocket\\Hyperf\\ConfigProvider"
+        }
+    },
+    "config": {
+        "sort-packages": true,
+        "audit": {
+            "ignore": [
+                "PKSA-z3gr-8qht-p93v"
+            ]
+        }
+    },
+    "scripts": {
+        "test": "phpunit"
+    },
+    "minimum-stability": "stable",
+    "prefer-stable": true
+}
