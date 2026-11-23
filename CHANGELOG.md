@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.3] - 2026-11-23
+
 ### Changed
 - Docs split into per-framework, per-protocol guides: `docs/laravel/{tcp,websocket,mqtt}.md`
   and `docs/hyperf/{tcp,websocket,mqtt}.md`, each with the full create-file → configure →
