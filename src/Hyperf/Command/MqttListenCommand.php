@@ -13,11 +13,11 @@ use Hyperf\Contract\ConfigInterface;
 
 final class MqttListenCommand extends Command
 {
-    protected $name = 'tcp-socket:mqtt-listen';
+    protected ?string $name = 'tcp-socket:mqtt-listen';
 
-    protected $description = 'Connect to the MQTT broker and subscribe to the configured topics';
+    protected string $description = 'Connect to the MQTT broker and subscribe to the configured topics';
 
-    protected $coroutine = false;
+    protected bool $coroutine = false;
 
     public function handle(): int
     {
@@ -27,6 +27,10 @@ final class MqttListenCommand extends Command
         $class = $config['handler'] ?? null;
         if (!is_string($class) || $class === '') {
             $this->output->writeln('<error>Configure tcp-socket.mqtt.handler with a class extending AbstractMqttClient.</error>');
+            return 1;
+        }
+        if (!class_exists($class)) {
+            $this->output->writeln("<error>MQTT handler class {$class} does not exist. Create it and update tcp-socket.mqtt.handler in config/autoload/tcp-socket.php.</error>");
             return 1;
         }
 

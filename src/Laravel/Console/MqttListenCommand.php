@@ -24,6 +24,10 @@ final class MqttListenCommand extends Command
             $this->error('Configure tcp-socket.mqtt.handler with a class extending AbstractMqttClient.');
             return self::FAILURE;
         }
+        if (!class_exists($class)) {
+            $this->error("MQTT handler class {$class} does not exist. Check tcp-socket.mqtt.handler in config/tcp-socket.php.");
+            return self::FAILURE;
+        }
 
         $client = $this->laravel->make($class);
         if (!$client instanceof AbstractMqttClient) {

@@ -14,15 +14,15 @@ use Symfony\Component\Console\Input\InputOption;
 
 final class TcpServerCommand extends Command
 {
-    protected $name = 'tcp-socket:serve';
+    protected ?string $name = 'tcp-socket:serve';
 
-    protected $description = 'Start the TCP socket server';
+    protected string $description = 'Start the TCP socket server';
 
     /**
      * Run outside a coroutine so Swoole\Server (or a blocking React loop) can
      * be created; otherwise "eventLoop has already been created".
      */
-    protected $coroutine = false;
+    protected bool $coroutine = false;
 
     protected function configure(): void
     {
@@ -49,6 +49,10 @@ final class TcpServerCommand extends Command
         $class = $config['handler'] ?? null;
         if (!is_string($class) || $class === '') {
             $this->output->writeln('<error>Configure tcp-socket.tcp.server.handler with a class extending AbstractTcpServerHandler.</error>');
+            return 1;
+        }
+        if (!class_exists($class)) {
+            $this->output->writeln("<error>Handler class {$class} does not exist. Create it and update tcp-socket.tcp.server.handler in config/autoload/tcp-socket.php.</error>");
             return 1;
         }
 

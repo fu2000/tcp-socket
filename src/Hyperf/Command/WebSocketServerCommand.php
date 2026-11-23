@@ -14,11 +14,11 @@ use Symfony\Component\Console\Input\InputOption;
 
 final class WebSocketServerCommand extends Command
 {
-    protected $name = 'tcp-socket:ws-serve';
+    protected ?string $name = 'tcp-socket:ws-serve';
 
-    protected $description = 'Start the WebSocket server';
+    protected string $description = 'Start the WebSocket server';
 
-    protected $coroutine = false;
+    protected bool $coroutine = false;
 
     protected function configure(): void
     {
@@ -45,6 +45,10 @@ final class WebSocketServerCommand extends Command
         $class = $config['handler'] ?? null;
         if (!is_string($class) || $class === '') {
             $this->output->writeln('<error>Configure tcp-socket.websocket.server.handler with a class extending AbstractWebSocketServerHandler.</error>');
+            return 1;
+        }
+        if (!class_exists($class)) {
+            $this->output->writeln("<error>Handler class {$class} does not exist. Create it and update tcp-socket.websocket.server.handler in config/autoload/tcp-socket.php.</error>");
             return 1;
         }
 

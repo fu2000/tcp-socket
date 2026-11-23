@@ -45,7 +45,7 @@ final class TcpServerCommand extends Command
      */
     private function resolveHandler(mixed $class, string $interface): ?object
     {
-        if (!is_string($class) || $class === '') {
+        if (!is_string($class) || $class === '' || !class_exists($class)) {
             return null;
         }
 

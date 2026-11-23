@@ -1,29 +1,29 @@
 # hk100/tcp-socket
 
-一个同时兼容 **Hyperf** 与 **Laravel** 的多协议通信包，支持 **TCP Socket**、**WebSocket**、**MQTT**。
+同时兼容 **Hyperf** 与 **Laravel** 的多协议通信包：**TCP Socket / WebSocket / MQTT**。
 
-- TCP / WebSocket：既提供 **服务端**（命令一键启动、控制台打印监听地址），也提供 **客户端**。
-- MQTT：提供 **客户端**（连接、自动订阅、发布）。
-- 网络层做了 **驱动抽象**：`swoole`（Swoole/OpenSwoole）与 `react`（纯 PHP 事件循环），`auto` 自动探测。
-- 两个框架下都会 **自动注册命令**，无需手动配置命令列表。
-- 用法是 **继承基类、实现少量方法**：handler（服务端）与 client（客户端）。
+- TCP、WebSocket：**服务端 + 客户端**
+- MQTT：**客户端**（连接、自动订阅、发布）
+- 服务端用命令一键启动，控制台打印监听地址
+- 网络层双驱动：`swoole`（Swoole/OpenSwoole）与 `react`（纯 PHP），`auto` 自动选择
+- 两个框架都会**自动发现并注册命令**，不需要手动配置命令列表
+- 用法是**继承基类、实现少量方法**
+- **不依赖 Laravel Echo / Reverb / 广播系统**，TCP、WebSocket、MQTT 全部为原生实现
 
-## 特性
+## 文档导航
 
-- TCP / WebSocket 服务端 & 客户端，Swoole 与 ReactPHP 双驱动
-- 内置 WebSocket 握手与帧编解码（不依赖 Ratchet，避免与 symfony 6/7 冲突）
-- TCP 分帧：`raw` / `eof` / `length-prefix`
-- MQTT 连接、自动订阅、发布、循环消费
-- Laravel 包自动发现（`extra.laravel.providers`）
-- Hyperf 自动发现（`extra.hyperf.config`）
-- 命令启动并在控制台打印监听地址
-- 每连接上下文（`setContext/getContext`），方便保存设备 ID 等状态
+| 文档 | 内容 |
+| --- | --- |
+| [Laravel 使用指南](docs/laravel.md) | 从安装到启动 TCP / WebSocket / MQTT，每一步都有完整代码 |
+| [Hyperf 使用指南](docs/hyperf.md) | 同上，包含 Hyperf 配置文件必须手动创建等注意事项 |
+
+> 第一次使用请直接看对应框架的指南，按步骤操作即可。
 
 ## 环境要求
 
 - PHP `^8.1`
 - Composer
-- 可选：`ext-swoole` 或 `ext-openswoole`（使用 `swoole` 驱动时需要）
+- 可选：`ext-swoole` 或 `ext-openswoole`（使用 `swoole` 驱动时需要；只用 `react` 驱动则不需要）
 
 ## 安装
 
@@ -31,27 +31,17 @@
 composer require hk100/tcp-socket
 ```
 
-要求在 Hyperf / Laravel 项目中，包会自动发现并注册服务与命令。
-
-> 本包 **不依赖 Laravel Echo、Reverb 或 Laravel 广播系统**。TCP、WebSocket、MQTT 全部是原生实现
-> （ReactPHP / Swoole / php-mqtt/client），WebSocket 握手与帧编解码也由本包自行完成。
-> 示例文件中的 “echo” 仅指“回显服务器”（把收到的数据原样发回），与 Laravel Echo 无关。
-
-### 发布到 Packagist 之前如何测试安装
-
-在包正式提交 Packagist 前，可以直接从 GitHub 作为 VCS 仓库安装：
+包发布到 Packagist 之前，可以从 GitHub 作为 VCS 仓库安装：
 
 ```bash
-# 在 Laravel / Hyperf 项目根目录执行
 composer config repositories.tcp-socket vcs https://github.com/fu2000/tcp-socket.git
-composer require hk100/tcp-socket:dev-main
-```
-
-或者使用已打好的版本 tag：
-
-```bash
 composer require hk100/tcp-socket:^1.0
 ```
+
+安装后：
+
+- Laravel：`extra.laravel.providers` 自动发现，无需修改 `config/app.php`
+- Hyperf：`extra.hyperf.config` 自动发现，无需手动注册 `ConfigProvider`
 
 ## 核心概念
 
@@ -63,93 +53,21 @@ composer require hk100/tcp-socket:^1.0
 | WebSocket 客户端 | `Client\AbstractWebSocketClient` | 主动连接 WebSocket 服务端 |
 | MQTT 客户端 | `Mqtt\AbstractMqttClient` | 连接 broker、订阅、发布 |
 
-服务端 handler 的回调：`onOpen` / `onMessage` / `onClose` / `onError`。
-客户端 handler 的回调：`onConnect` / `onMessage` / `onClose` / `onError`。
-MQTT 回调：`onMessage`，以及可选的 `onConnect` / `onSubscribe` / `onDisconnect`。
+回调：
 
-## 服务端快速开始
+- 服务端 handler：`onOpen` / `onMessage` / `onClose` / `onError`
+- 客户端 handler：`onConnect` / `onMessage` / `onClose` / `onError`
+- MQTT：`onMessage`，可选 `onConnect` / `onSubscribe` / `onDisconnect`
 
-### 1. 编写 handler
+## 命令
 
-```php
-namespace App\Socket;
+| 命令 | 作用 | Laravel | Hyperf |
+| --- | --- | --- | --- |
+| `tcp-socket:serve` | 启动 TCP 服务端 | `php artisan tcp-socket:serve` | `php bin/hyperf.php tcp-socket:serve` |
+| `tcp-socket:ws-serve` | 启动 WebSocket 服务端 | `php artisan tcp-socket:ws-serve` | `php bin/hyperf.php tcp-socket:ws-serve` |
+| `tcp-socket:mqtt-listen` | 连接 MQTT 并订阅 | `php artisan tcp-socket:mqtt-listen` | `php bin/hyperf.php tcp-socket:mqtt-listen` |
 
-use Hk100\TcpSocket\Contracts\ConnectionInterface;
-use Hk100\TcpSocket\Message\Message;
-use Hk100\TcpSocket\Server\AbstractTcpServerHandler;
-
-class DeviceTcpHandler extends AbstractTcpServerHandler
-{
-    public function onOpen(ConnectionInterface $connection): void
-    {
-        // 设备接入时，可保存设备信息到连接上下文
-        $connection->setContext('connected_at', time());
-    }
-
-    public function onMessage(ConnectionInterface $connection, Message $message): void
-    {
-        // $message->payload 是已完成分帧的一条消息
-        $connection->send('received:' . $message->payload);
-    }
-
-    public function onClose(ConnectionInterface $connection): void
-    {
-    }
-}
-```
-
-WebSocket 同理，继承 `AbstractWebSocketServerHandler` 即可（`Message` 带有 `binary` 标记）。
-
-### 2. 配置
-
-Laravel：发布配置并把 `handler` 指向你的类。
-
-```bash
-php artisan vendor:publish --tag=tcp-socket-config
-```
-
-```php
-// config/tcp-socket.php
-'tcp' => [
-    'server' => [
-        'host' => '0.0.0.0',
-        'port' => 9501,
-        'handler' => App\Socket\DeviceTcpHandler::class,
-        'framing' => 'eof',
-        'delimiter' => "\n",
-    ],
-],
-```
-
-Hyperf：复制示例配置到 `config/autoload/tcp-socket.php`（见 `examples/config/hyperf-tcp-socket.php`）。
-
-### 3. 启动
-
-Laravel：
-
-```bash
-php artisan tcp-socket:serve
-php artisan tcp-socket:ws-serve
-php artisan tcp-socket:mqtt-listen
-```
-
-Hyperf：
-
-```bash
-php bin/hyperf.php tcp-socket:serve
-php bin/hyperf.php tcp-socket:ws-serve
-php bin/hyperf.php tcp-socket:mqtt-listen
-```
-
-输出示例：
-
-```text
-TCP server listening at tcp://0.0.0.0:9501 (driver: react, framing: eof)
-WebSocket server listening at ws://0.0.0.0:9502 (driver: swoole)
-MQTT client connecting to mqtt://127.0.0.1:1883, subscribing to: device/+/data
-```
-
-命令参数（`tcp-socket:serve` / `tcp-socket:ws-serve`）：
+`tcp-socket:serve` / `tcp-socket:ws-serve` 支持参数：
 
 | 参数 | 说明 |
 | --- | --- |
@@ -157,120 +75,25 @@ MQTT client connecting to mqtt://127.0.0.1:1883, subscribing to: device/+/data
 | `--host=` | 覆盖监听地址 |
 | `--port=` | 覆盖监听端口 |
 
-## 客户端用法（不使用服务端）
+启动后会打印监听地址：
 
-直接继承 client 基类，实现回调，配置服务器地址后连接。
-
-```php
-namespace App\Socket;
-
-use Hk100\TcpSocket\Client\AbstractTcpClient;
-use Hk100\TcpSocket\Message\Message;
-
-class AppTcpClient extends AbstractTcpClient
-{
-    public function onConnect(): void
-    {
-        $this->send("hello\n"); // 分帧由底层自动处理
-    }
-
-    public function onMessage(Message $message): void
-    {
-        // 处理 $message->payload
-    }
-}
-```
-
-```php
-use Hk100\TcpSocket\Client\ClientConfig;
-
-$client = new AppTcpClient();
-$client->configure(ClientConfig::forTcp([
-    'host' => '127.0.0.1',
-    'port' => 9501,
-    'framing' => 'eof',
-    'delimiter' => "\n",
-]));
-$client->connect();
-$client->run(); // 阻塞运行（react）/ 协程等待（swoole）
-```
-
-WebSocket 客户端：
-
-```php
-use Hk100\TcpSocket\Client\AbstractWebSocketClient;
-
-class AppWsClient extends AbstractWebSocketClient
-{
-    public function onConnect(): void
-    {
-        $this->send('hello');
-    }
-}
-
-$client = new AppWsClient();
-$client->configure(ClientConfig::forWebSocket(['url' => 'ws://127.0.0.1:9502']));
-$client->connect();
-$client->run();
-```
-
-> 也可以在容器中通过 `Hk100\TcpSocket\Client\ClientBuilder` 组装 client（`attachTcp` / `attachWebSocket`）。
-
-## MQTT 用法
-
-```php
-namespace App\Mqtt;
-
-use Hk100\TcpSocket\Mqtt\AbstractMqttClient;
-use Hk100\TcpSocket\Mqtt\MqttMessage;
-
-class DeviceMqttClient extends AbstractMqttClient
-{
-    public function onMessage(MqttMessage $message): void
-    {
-        // $message->topic / $message->payload / $message->retain
-    }
-}
-```
-
-```php
-// config/tcp-socket.php
-'mqtt' => [
-    'host' => '127.0.0.1',
-    'port' => 1883,
-    'client_id' => null,            // null 自动生成
-    'username' => null,
-    'password' => null,
-    'handler' => App\Mqtt\DeviceMqttClient::class,
-    'subscriptions' => [
-        'device/+/data' => 0,
-    ],
-],
-```
-
-执行 `tcp-socket:mqtt-listen` 后：连接 broker → 自动订阅所有 `subscriptions` → 进入消费循环。
-
-手工使用：
-
-```php
-use Hk100\TcpSocket\Mqtt\MqttConfig;
-
-$client = new DeviceMqttClient();
-$client->configure(MqttConfig::fromArray(config('tcp-socket.mqtt')));
-$client->run();
+```text
+TCP server listening at tcp://0.0.0.0:9501 (driver: swoole, framing: eof)
+WebSocket server listening at ws://0.0.0.0:9502 (driver: swoole)
+MQTT client connecting to mqtt://127.0.0.1:1883, subscribing to: device/+/data
 ```
 
 ## 分帧（Framing）
 
 TCP 是字节流，需要界定“一条消息”。`framing` 配置：
 
-| 类型 | 说明 | 编码行为 |
+| 类型 | 说明 | 发送行为 |
 | --- | --- | --- |
 | `raw` | 每个 TCP 数据块即一条消息 | 原样发送 |
-| `eof` | 按分隔符切分（默认 `\n`） | 发送时追加分隔符 |
-| `length` | 长度前缀（1/2/4 字节大端） | 发送时写入长度头 |
+| `eof` | 按分隔符切分（默认 `\n`） | 自动追加分隔符 |
+| `length` | 长度前缀（1/2/4 字节大端） | 自动写入长度头 |
 
-分帧对业务透明：handler 拿到的就是“一条消息”，`$connection->send()` 传入的是消息内容。
+分帧对业务透明：handler 收到的就是“一条消息”，`$connection->send()` 传入消息内容即可。
 
 ## 驱动说明
 
@@ -278,75 +101,45 @@ TCP 是字节流，需要界定“一条消息”。`framing` 配置：
 
 - `react`：纯 PHP（ReactPHP），Laravel、Hyperf、无框架脚本都能用，无需扩展。
 - `swoole`：性能更好，需要 `ext-swoole` / `ext-openswoole`。
-- `auto`：装了 Swoole 时优先 `swoole`；客户端在**非协程环境**下自动退回 `react`（因为 Swoole 协程客户端必须在协程内使用）。
+- `auto`：装了 Swoole 时优先 `swoole`；客户端在**非协程环境**下自动退回 `react`
+  （Swoole 协程客户端必须在协程内使用）。
 
-### Hyperf 注意事项
+服务端命令在 Hyperf 中会以非协程方式运行（包内已设置 `$coroutine = false`），
+因此可以在命令进程里直接启动独立的 Swoole 服务器或 React 事件循环。
 
-Hyperf 命令默认运行在协程中，而 `Swoole\Server` 不能在协程事件循环里创建。本包已把服务端命令声明为 `$coroutine = false`，因此在命令中可以直接启动独立服务器（`swoole` 或 `react` 驱动均可）。
+## 配置结构
 
-- 服务端命令：`$coroutine = false`，可在命令进程内启动服务器。
-- Swoole 客户端：只能在协程内使用（如 Hyperf 协程、`Swoole\Coroutine\run()`）。在普通 Laravel 请求/命令中用 client 时，`auto` 会选 `react`。
+配置键为 `tcp-socket.*`，两个框架结构一致：
 
-## 配置参考
-
-```php
-return [
-    'driver' => 'auto',
-
-    'tcp' => [
-        'server' => [
-            'host' => '0.0.0.0', 'port' => 9501,
-            'handler' => null,
-            'framing' => 'eof', 'delimiter' => "\n", 'length_bytes' => 4,
-            'options' => [], // 透传给 Swoole\Server::set()
-        ],
-        'client' => [
-            'host' => '127.0.0.1', 'port' => 9501, 'connect_timeout' => 5,
-            'handler' => null,
-            'framing' => 'eof', 'delimiter' => "\n", 'length_bytes' => 4,
-        ],
-    ],
-
-    'websocket' => [
-        'server' => [
-            'host' => '0.0.0.0', 'port' => 9502, 'path' => '/',
-            'handler' => null, 'options' => [],
-        ],
-        'client' => [
-            'url' => 'ws://127.0.0.1:9502', 'connect_timeout' => 5, 'handler' => null,
-        ],
-    ],
-
-    'mqtt' => [
-        'host' => '127.0.0.1', 'port' => 1883,
-        'client_id' => null, 'username' => null, 'password' => null,
-        'clean_session' => true, 'keep_alive' => 60, 'connect_timeout' => 5,
-        'tls' => null, // ['ca_file' => ..., 'verify_peer' => true]
-        'handler' => null,
-        'subscriptions' => [],
-    ],
-];
+```text
+tcp-socket.driver
+tcp-socket.tcp.server        host / port / handler / framing / delimiter / length_bytes / options
+tcp-socket.tcp.client        host / port / connect_timeout / framing ...
+tcp-socket.websocket.server  host / port / path / handler / options
+tcp-socket.websocket.client  url / connect_timeout
+tcp-socket.mqtt              host / port / username / password / handler / subscriptions ...
 ```
 
-> 缺少配置文件也能运行：核心内置默认值（`Hk100\TcpSocket\Support\Defaults`）。
+完整配置示例与每一步操作见：
+
+- Laravel → [docs/laravel.md](docs/laravel.md)
+- Hyperf → [docs/hyperf.md](docs/hyperf.md)
+
+> 缺少配置文件也能启动（使用 `Hk100\TcpSocket\Support\Defaults` 内置默认值），
+> 但 `handler` 必须配置，否则命令会提示配置错误。
 
 ## 示例
 
-- `examples/handlers/`：TCP / WebSocket / MQTT 的 handler 示例（拷进应用即可）
-- `examples/config/`：Laravel 与 Hyperf 的配置示例
+- `examples/handlers/`：TCP / WebSocket / MQTT handler 示例
+- `examples/config/`：Laravel 与 Hyperf 配置示例
 - `examples/standalone/`：无需框架的回环服务端脚本
 
 ```bash
-# React TCP echo
 php examples/standalone/react-tcp-echo.php 0.0.0.0 9501
 printf 'hello\n' | nc 127.0.0.1 9501
 
-# Swoole TCP echo（需 ext-swoole）
-php examples/standalone/swoole-tcp-echo.php 0.0.0.0 9501
-
-# React WebSocket echo
 php examples/standalone/react-ws-echo.php 0.0.0.0 9502
-websocat ws://127.0.0.1:9502
+# 浏览器控制台: new WebSocket('ws://127.0.0.1:9502')
 ```
 
 ## 测试
@@ -354,56 +147,36 @@ websocat ws://127.0.0.1:9502
 ```bash
 composer install
 vendor/bin/phpunit
+HK100_RUN_SWOOLE_TESTS=1 vendor/bin/phpunit   # 需要 ext-swoole
 ```
 
 ## 发布到 Packagist
 
-1. 在 GitHub 创建仓库并推送到远程。
-2. 打一个语义化版本 tag：
+1. 在 GitHub 创建仓库并推送。
+2. 打 tag：
 
    ```bash
-   git tag v1.0.0
-   git push origin v1.0.0
+   git tag v1.0.1
+   git push origin v1.0.1
    ```
 
-3. 打开 <https://packagist.org/packages/submit>，粘贴仓库 URL，提交。
-4. 配置 GitHub Webhook（Packagist 会给出）以便后续 tag 自动同步。
+3. 打开 <https://packagist.org/packages/submit>，粘贴仓库 URL。
+4. 配置 Packagist 给出的 GitHub Webhook，之后推 tag 会自动同步。
 
-发布后用户即可 `composer require hk100/tcp-socket`。
-
-> 包名（vendor/name）与 GitHub 账号名**不必一致**，Packagist 以 `composer.json` 的 `name` 为准。
-> 例如仓库在 `fu2000` 账号下，包名仍可以是 `hk100/tcp-socket`。
+> 包名与 GitHub 账号名不必一致，Packagist 以 `composer.json` 的 `name` 为准。
 
 ## 需要提交到 Git 的文件
 
 提交：
 
 ```text
-composer.json
-README.md
-LICENSE
-CHANGELOG.md
-.gitignore
-.editorconfig
-phpunit.xml.dist
-config/
-src/
-examples/
-tests/
+composer.json  README.md  LICENSE  CHANGELOG.md  .gitignore  .editorconfig  phpunit.xml.dist
+config/  docs/  src/  examples/  tests/
 ```
 
-忽略（见 `.gitignore`）：
+忽略（见 `.gitignore`）：`/vendor/`、`composer.lock`、`.phpunit.cache/`、`.idea/`、`.vscode/`、`.DS_Store`、`*.log`。
 
-```text
-/vendor/
-composer.lock
-/build/
-.phpunit.cache/
-.phpunit.result.cache
-.idea/  .vscode/  .DS_Store  *.log
-```
-
-> 作为库项目，通常不提交 `composer.lock`（由使用者项目自行锁定依赖）。
+> 作为库项目，通常不提交 `composer.lock`。
 
 ## 许可证
 

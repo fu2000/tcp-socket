@@ -42,7 +42,7 @@ final class WebSocketServerCommand extends Command
 
     private function resolveHandler(mixed $class): ?object
     {
-        if (!is_string($class) || $class === '') {
+        if (!is_string($class) || $class === '' || !class_exists($class)) {
             return null;
         }
 
