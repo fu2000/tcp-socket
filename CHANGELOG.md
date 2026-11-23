@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- Docs split into per-framework, per-protocol guides: `docs/laravel/{tcp,websocket,mqtt}.md`
+  and `docs/hyperf/{tcp,websocket,mqtt}.md`, each with the full create-file → configure →
+  start → send/receive walkthrough. `docs/{laravel,hyperf}/README.md` are the framework indexes.
+
 ## [1.0.2] - 2026-11-23
 
 ### Fixed

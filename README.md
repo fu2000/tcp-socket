@@ -12,12 +12,20 @@
 
 ## 文档导航
 
-| 文档 | 内容 |
-| --- | --- |
-| [Laravel 使用指南](docs/laravel.md) | 从安装到启动 TCP / WebSocket / MQTT，每一步都有完整代码 |
-| [Hyperf 使用指南](docs/hyperf.md) | 同上，包含 Hyperf 配置文件必须手动创建等注意事项 |
+每个协议一份独立指南，包含完整的建文件 → 配置 → 启动 → 收发消息步骤。
 
-> 第一次使用请直接看对应框架的指南，按步骤操作即可。
+| 协议 | Laravel | Hyperf |
+| --- | --- | --- |
+| TCP Socket | [docs/laravel/tcp.md](docs/laravel/tcp.md) | [docs/hyperf/tcp.md](docs/hyperf/tcp.md) |
+| WebSocket | [docs/laravel/websocket.md](docs/laravel/websocket.md) | [docs/hyperf/websocket.md](docs/hyperf/websocket.md) |
+| MQTT | [docs/laravel/mqtt.md](docs/laravel/mqtt.md) | [docs/hyperf/mqtt.md](docs/hyperf/mqtt.md) |
+
+框架入口（安装、配置创建、命令表、注意事项）：
+
+- [Laravel 使用指南](docs/laravel/README.md)
+- [Hyperf 使用指南](docs/hyperf/README.md)
+
+> 第一次使用请直接看对应框架的索引，再按协议进入具体指南操作即可。
 
 ## 环境要求
 
@@ -122,8 +130,8 @@ tcp-socket.mqtt              host / port / username / password / handler / subsc
 
 完整配置示例与每一步操作见：
 
-- Laravel → [docs/laravel.md](docs/laravel.md)
-- Hyperf → [docs/hyperf.md](docs/hyperf.md)
+- Laravel → [docs/laravel/README.md](docs/laravel/README.md)
+- Hyperf → [docs/hyperf/README.md](docs/hyperf/README.md)
 
 > 缺少配置文件也能启动（使用 `Hk100\TcpSocket\Support\Defaults` 内置默认值），
 > 但 `handler` 必须配置，否则命令会提示配置错误。
