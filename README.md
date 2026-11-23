@@ -33,6 +33,26 @@ composer require hk100/tcp-socket
 
 要求在 Hyperf / Laravel 项目中，包会自动发现并注册服务与命令。
 
+> 本包 **不依赖 Laravel Echo、Reverb 或 Laravel 广播系统**。TCP、WebSocket、MQTT 全部是原生实现
+> （ReactPHP / Swoole / php-mqtt/client），WebSocket 握手与帧编解码也由本包自行完成。
+> 示例文件中的 “echo” 仅指“回显服务器”（把收到的数据原样发回），与 Laravel Echo 无关。
+
+### 发布到 Packagist 之前如何测试安装
+
+在包正式提交 Packagist 前，可以直接从 GitHub 作为 VCS 仓库安装：
+
+```bash
+# 在 Laravel / Hyperf 项目根目录执行
+composer config repositories.tcp-socket vcs https://github.com/fu2000/tcp-socket.git
+composer require hk100/tcp-socket:dev-main
+```
+
+或者使用已打好的版本 tag：
+
+```bash
+composer require hk100/tcp-socket:^1.0
+```
+
 ## 核心概念
 
 | 类型 | 基类 | 用途 |
@@ -350,6 +370,9 @@ vendor/bin/phpunit
 4. 配置 GitHub Webhook（Packagist 会给出）以便后续 tag 自动同步。
 
 发布后用户即可 `composer require hk100/tcp-socket`。
+
+> 包名（vendor/name）与 GitHub 账号名**不必一致**，Packagist 以 `composer.json` 的 `name` 为准。
+> 例如仓库在 `fu2000` 账号下，包名仍可以是 `hk100/tcp-socket`。
 
 ## 需要提交到 Git 的文件
 
