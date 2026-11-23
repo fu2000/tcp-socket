@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.2] - 2026-11-23
+
+### Fixed
+- Swoole WebSocket server dropped every incoming message when a custom
+  handshake was used: Swoole does not emit the `open` event in that mode, so
+  connections are now registered immediately after a successful handshake
+  (the `open` handler is kept as a fallback for other Swoole versions).
+
 ## [1.0.1] - 2026-11-23
 
 ### Fixed

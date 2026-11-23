@@ -45,30 +45,21 @@ final class SwooleWebSocketServer implements WebSocketServerInterface
         $server->set(SwooleSupport::serverOptions($this->config->options));
         $this->server = $server;
 
-        $server->on('handshake', function (\Swoole\Http\Request $request, \Swoole\Http\Response $response): bool {
-            return $this->handleHandshake($request, $response);
+        // A custom handshake suppresses Swoole's "open" event, so the connection
+        // is registered right after a successful handshake.
+        $server->on('handshake', function (\Swoole\Http\Request $request, \Swoole\Http\Response $response) use ($server): bool {
+            if (!$this->handleHandshake($request, $response)) {
+                return false;
+            }
+
+            $this->registerConnection($server, $request->fd);
+
+            return true;
         });
 
+        // Kept as a fallback for Swoole versions that still emit "open".
         $server->on('open', function (\Swoole\WebSocket\Server $srv, \Swoole\Http\Request $request): void {
-            $fd = $request->fd;
-            $info = $srv->getClientInfo($fd);
-            $remote = is_array($info) && isset($info['remote_ip'])
-                ? $info['remote_ip'] . ':' . ($info['remote_port'] ?? 0)
-                : null;
-
-            $connection = new SwooleConnection(
-                $fd,
-                static fn (string $data): bool => (bool) $srv->push($fd, $data, WEBSOCKET_OPCODE_TEXT),
-                static function () use ($srv, $fd): void {
-                    $srv->close($fd);
-                },
-                static fn (): bool => (bool) $srv->isEstablished($fd),
-                $remote,
-                "{$this->config->host}:{$this->config->port}",
-            );
-
-            $this->connections[$fd] = $connection;
-            $this->handler?->onOpen($connection);
+            $this->registerConnection($srv, $request->fd);
         });
 
         $server->on('message', function (\Swoole\WebSocket\Server $srv, \Swoole\WebSocket\Frame $frame): void {
@@ -148,6 +139,32 @@ final class SwooleWebSocketServer implements WebSocketServerInterface
         $response->end();
 
         return true;
+    }
+
+    private function registerConnection(\Swoole\WebSocket\Server $srv, int $fd): void
+    {
+        if (isset($this->connections[$fd])) {
+            return;
+        }
+
+        $info = $srv->getClientInfo($fd);
+        $remote = is_array($info) && isset($info['remote_ip'])
+            ? $info['remote_ip'] . ':' . ($info['remote_port'] ?? 0)
+            : null;
+
+        $connection = new SwooleConnection(
+            $fd,
+            static fn (string $data): bool => (bool) $srv->push($fd, $data, WEBSOCKET_OPCODE_TEXT),
+            static function () use ($srv, $fd): void {
+                $srv->close($fd);
+            },
+            static fn (): bool => (bool) $srv->isEstablished($fd),
+            $remote,
+            "{$this->config->host}:{$this->config->port}",
+        );
+
+        $this->connections[$fd] = $connection;
+        $this->handler?->onOpen($connection);
     }
 
     private function pathMatches(string $path): bool
